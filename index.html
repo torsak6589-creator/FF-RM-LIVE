@@ -51,6 +51,16 @@ tr.total td{border-top:2px solid var(--line);font-weight:700;color:var(--gold);f
 .tooltip{position:fixed;pointer-events:none;background:#1B2540;border:1px solid var(--gold-dim);padding:8px 12px;border-radius:8px;font-size:12px;font-family:'DM Mono';opacity:0;transition:opacity .1s;z-index:99;line-height:1.6}
 .note{color:var(--muted);font-size:12px}
 #loading{padding:60px;text-align:center;color:var(--muted);font-size:15px}
+.filterbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:6px}
+.flabel{font-size:13px;color:var(--muted);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:5px 13px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;cursor:pointer;user-select:none;font-family:'DM Mono';display:flex;align-items:center;gap:6px;transition:.12s;background:var(--card2);color:var(--muted)}
+.chip:hover{border-color:var(--gold-dim)}
+.chip.on{color:#0A0F1E;font-weight:600;border-color:transparent}
+.chip .cd{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.chip .ct{font-size:11px;opacity:.85}
+.freset{margin-left:auto;font-size:12px;color:var(--cyan);cursor:pointer;user-select:none}
+.freset:hover{text-decoration:underline}
 footer{margin-top:26px;padding:18px 22px;background:var(--card2);border:1px solid var(--line);border-radius:14px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12.5px}
 footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} footer .r b{color:var(--txt)}
 </style>
@@ -75,6 +85,12 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
 
 <div id="loading">⏳ กำลังดึงข้อมูลจาก AVL Sheet…</div>
 <div id="app" style="display:none">
+
+<div class="filterbar" id="filterbar">
+  <span class="flabel">🔎 กรอง Farm Code:</span>
+  <div class="chips" id="codeChips"></div>
+  <span class="freset" id="freset" onclick="resetCodes()">ล้างตัวกรอง</span>
+</div>
 
 <div class="sec">📦 KPI — <span id="kpiDate" style="color:var(--txt)"></span></div>
 <div class="kpis" id="kpis"></div>
@@ -123,17 +139,16 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vQba_P4MZBDpLd9IB8A5BJmSthzlCwRmm14XlpxFbCY-KziNBx11RyLnXFmba8592l0q8BnOe4vU1Sj/pub?gid=2111623806&single=true&output=csv";
 const KG_COLS=['ABC(KG)','ตกไซส์(KG)','ห้องเย็น(KG)','สุดท้าย(KG)','D(KG)','จัมโบ้(KG)','รูแบ(KG)'];
 const CODE_META={
- 'P1-MTA':{name:'จุดชุมพร (P1)',c:'#2DD4A7',desc:'รถกระบะ/6ล้อ/12ล้อ · ชุบน้ำยาที่โรงงาน FF'},
- 'S-MTA':{name:'ซื้อสุราษฎร์ (S/P2)',c:'#F0B429',desc:'ชุบน้ำยา+ขึ้นกรงที่จุดรับ · รถเทเลอร์'},
- 'P2-MTA':{name:'ซื้อสุราษฎร์ (P2)',c:'#F0B429',desc:'ชุบน้ำยา+ขึ้นกรงที่จุดรับ · รถเทเลอร์'},
- 'P-MTA':{name:'ล้ง ชุมพร+สุราษฎร์ (P)',c:'#C8982A',desc:'รหัสรวม ก่อนแยก P1/S'},
- 'H-MTA':{name:'ซื้อ KST (H-MTA)',c:'#38BDF8',desc:'รับหน้าโรงงาน · ไม่มีการขนส่ง'},
- 'C-MTA':{name:'ซื้อจันทบุรี (C)',c:'#A78BFA',desc:'แหล่งจันทบุรี'},
- 'U-MTA':{name:'ซื้ออุตรดิตถ์ (U)',c:'#F87171',desc:'แหล่งอุตรดิตถ์'},
- 'D-MTA':{name:'D-MTA',c:'#FB923C',desc:''},
+ 'P1':{name:'จุดชุมพร (P1)',c:'#2DD4A7',desc:'รถกระบะ/6ล้อ/12ล้อ · ชุบน้ำยาที่โรงงาน FF'},
+ 'S':{name:'ซื้อสุราษฎร์ (P2)',c:'#F0B429',desc:'ชุบน้ำยา+ขึ้นกรงที่จุดรับ · รถเทเลอร์ · P2 = S-MTA'},
+ 'H':{name:'ซื้อ KST (H-MTA)',c:'#38BDF8',desc:'รับหน้าโรงงาน · ไม่มีการขนส่ง'},
+ 'C':{name:'ซื้อจันทบุรี (C)',c:'#A78BFA',desc:'แหล่งจันทบุรี'},
+ 'U':{name:'ซื้ออุตรดิตถ์ (U)',c:'#F87171',desc:'แหล่งอุตรดิตถ์'},
+ 'D':{name:'D-MTA',c:'#FB923C',desc:''},
+ 'อื่นๆ':{name:'อื่นๆ',c:'#8B94B0',desc:''},
 };
 const THM=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-let DATA=[],MONTHS=[],curMonth=null,curDay=null;
+let DATA=[],MONTHS=[],curMonth=null,curDay=null,activeCodes=new Set();
 const tip=document.getElementById('tip');
 const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function showTip(e,h){tip.innerHTML=h;tip.style.opacity=1;tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-10)+'px'}
@@ -167,7 +182,19 @@ async function loadData(){
       o._d=d;o._m=m;o._y=y;o._key=y*10000+m*100+d;
       o._kg=KG_COLS.reduce((s,c)=>s+num(o[c]),0);
       o._val=num(o['มูลค่า']);
-      o._code=(o['RM FARMCODE']||'').trim()||'อื่นๆ';
+      const raw=(o['RM FARMCODE']||'').trim();
+      const tag=(o['ลักษณะทั่วไป']||'').trim().toUpperCase();
+      // resolve canonical source; before 9 Jul the P-MTA rows carry ชุมพร/สุราษฎร์ in ลักษณะทั่วไป
+      let code;
+      if(raw==='P1-MTA') code='P1';
+      else if(raw==='S-MTA'||raw==='P2'||raw==='P2-MTA') code='S';
+      else if(raw==='P-MTA') code=tag.startsWith('P2')?'S':'P1'; // N/ว่าง/หลังสวน = ชุมพร
+      else if(raw==='H-MTA') code='H';
+      else if(raw==='C-MTA') code='C';
+      else if(raw==='U-MTA') code='U';
+      else if(raw==='D-MTA') code='D';
+      else code='อื่นๆ';
+      o._raw=raw; o._tag=tag; o._code=code;
       return o;
     }).filter(Boolean);
     // months list
@@ -176,6 +203,7 @@ async function loadData(){
     const sm=document.getElementById('selMonth');
     sm.innerHTML=ms.map(m=>`<option value="${m}">${THM[m%100-1]} ${Math.floor(m/100)}</option>`).join('');
     curMonth=ms[0];sm.value=curMonth;
+    buildChips();
     buildDays();
     document.getElementById('stamp').textContent='อัปเดตล่าสุด: '+new Date().toLocaleString('th-TH')+' · '+fmt(DATA.length)+' รายการ';
     document.getElementById('loading').style.display='none';
@@ -186,14 +214,40 @@ async function loadData(){
   }
 }
 function monthRows(){return DATA.filter(r=>r._y*100+r._m===+curMonth)}
+// apply active code filter (empty set = show all)
+function fc(rows){return activeCodes.size?rows.filter(r=>activeCodes.has(r._code)):rows}
+function buildChips(){
+  // codes available in current month (before filter), sorted by volume
+  const mr=monthRows();
+  const vol={};mr.forEach(r=>{vol[r._code]=(vol[r._code]||0)+r._kg});
+  const codes=Object.keys(vol).sort((a,b)=>vol[b]-vol[a]);
+  // drop any active codes not present this month
+  activeCodes=new Set([...activeCodes].filter(c=>codes.includes(c)));
+  const box=document.getElementById('codeChips');
+  box.innerHTML=codes.map(c=>{
+    const m=CODE_META[c]||{name:c,c:'#8B94B0'};
+    const on=activeCodes.has(c);
+    return`<span class="chip ${on?'on':''}" data-c="${c}" ${on?`style="background:${m.c}"`:''}>
+      <span class="cd" style="background:${m.c}"></span>${c}<span class="ct">${m.name}</span></span>`;
+  }).join('');
+  box.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{
+    const c=el.dataset.c;
+    if(activeCodes.has(c))activeCodes.delete(c);else activeCodes.add(c);
+    buildChips();buildDays();
+  }));
+  document.getElementById('freset').style.display=activeCodes.size?'':'none';
+}
+function resetCodes(){activeCodes.clear();buildChips();buildDays();}
 function buildDays(){
-  const days=[...new Set(monthRows().map(r=>r._d))].sort((a,b)=>b-a);
+  const days=[...new Set(fc(monthRows()).map(r=>r._d))].sort((a,b)=>b-a);
   const sd=document.getElementById('selDay');
+  if(!days.length){sd.innerHTML='<option>ไม่มีข้อมูล</option>';document.getElementById('app').querySelectorAll('.kpis,.srcs').forEach(x=>x.innerHTML='');render();return;}
   sd.innerHTML=days.map(d=>`<option value="${d}">วันที่ ${d}</option>`).join('');
-  curDay=days[0];sd.value=curDay;
+  if(!days.includes(+curDay))curDay=days[0];
+  sd.value=curDay;
   render();
 }
-document.getElementById('selMonth').addEventListener('change',e=>{curMonth=+e.target.value;buildDays()});
+document.getElementById('selMonth').addEventListener('change',e=>{curMonth=+e.target.value;buildChips();buildDays()});
 document.getElementById('selDay').addEventListener('change',e=>{curDay=+e.target.value;render()});
 
 function agg(rows){
@@ -201,14 +255,15 @@ function agg(rows){
   return{kg,val,price:kg?val/kg:0};
 }
 function render(){
-  const mr=monthRows();
+  const mr=fc(monthRows());
   const dayRows=mr.filter(r=>r._d===+curDay);
   const days=[...new Set(mr.map(r=>r._d))].sort((a,b)=>a-b);
   const daily=days.map(d=>({d,...agg(mr.filter(r=>r._d===d))}));
   const t=agg(dayRows);
   const prev=daily.filter(x=>x.d<+curDay).pop();
   const mn=THM[curMonth%100-1]+' '+Math.floor(curMonth/100);
-  document.getElementById('kpiDate').textContent=`วันที่ ${curDay} ${mn}`;
+  const flt=activeCodes.size?' · กรอง: '+[...activeCodes].join(', '):'';
+  document.getElementById('kpiDate').textContent=`วันที่ ${curDay} ${mn}${flt}`;
 
   // KPI
   const diff=prev?t.price-prev.price:null;
