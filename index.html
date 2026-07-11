@@ -61,6 +61,28 @@ tr.total td{border-top:2px solid var(--line);font-weight:700;color:var(--gold);f
 .chip .ct{font-size:11px;opacity:.85}
 .freset{margin-left:auto;font-size:12px;color:var(--cyan);cursor:pointer;user-select:none}
 .freset:hover{text-decoration:underline}
+
+/* ===== PRINT / PDF ===== */
+@media print{
+  @page{size:A4;margin:8mm}
+  html,body{background:#0A0F1E !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{padding:0;max-width:100%;font-size:11px}
+  .ctrl,.stamp,.freset,#loading,.live{display:none !important}
+  .hero{border-radius:0;margin-bottom:12px;padding:18px 22px;page-break-inside:avoid}
+  .hero h1{font-size:21px}
+  .sec{margin:14px 0 8px;font-size:12px;page-break-after:avoid}
+  .kpi,.src,.panel,table,.filterbar{page-break-inside:avoid}
+  .kpis,.srcs{gap:8px}
+  .kpi .v{font-size:21px}
+  .grid2{grid-template-columns:1fr 1fr !important}
+  .panel{padding:14px}
+  tr:hover td{background:transparent !important}
+  #trucks{display:block !important}
+  .filterbar{page-break-inside:avoid}
+  footer{page-break-inside:avoid;margin-top:14px}
+  svg{max-height:230px}
+  a[href]:after{content:""}
+}
 footer{margin-top:26px;padding:18px 22px;background:var(--card2);border:1px solid var(--line);border-radius:14px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12.5px}
 footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} footer .r b{color:var(--txt)}
 </style>
@@ -78,6 +100,7 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
       <select id="selMonth"></select>
       <select id="selDay"></select>
       <button class="gold" onclick="loadData()">⟳ Refresh</button>
+      <button onclick="printReport()">🖨️ Print / PDF</button>
     </div>
     <div class="stamp" id="stamp">กำลังโหลด…</div>
   </div>
@@ -368,6 +391,8 @@ function drawGrades(rows){
     el.addEventListener('mouseleave',hideTip);
   });
 }
+
+function printReport(){window.print();}
 
 loadData();
 </script>
