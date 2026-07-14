@@ -74,7 +74,7 @@ tr.total td{border-top:2px solid var(--line);font-weight:700;color:var(--gold);f
   @page{size:A4;margin:8mm}
   html,body{background:#0A0F1E !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body{padding:0;max-width:100%;font-size:11px}
-  .ctrl,.stamp,.freset,#loading,.live{display:none !important}
+  .ctrl,.stamp,.freset,#loading,.live,#rangebar{display:none !important}
   .hero{border-radius:0;margin-bottom:12px;padding:18px 22px;page-break-inside:avoid}
   .hero h1{font-size:21px}
   .sec{margin:14px 0 8px;font-size:12px;page-break-after:avoid}
@@ -106,12 +106,6 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
     <div class="ctrl">
       <select id="selMonth"></select>
       <select id="selDay"></select>
-      <span class="rangesep">|</span>
-      <input type="date" id="dateFrom" title="วันเริ่มต้น">
-      <span class="dto">ถึง</span>
-      <input type="date" id="dateTo" title="วันสิ้นสุด">
-      <button id="applyRangeBtn" onclick="applyRange()">📅 ดูช่วงวัน</button>
-      <button id="clearRangeBtn" onclick="clearRange()" style="display:none">✕ ล้างช่วง</button>
       <button class="gold" onclick="loadData()">⟳ Refresh</button>
       <button onclick="printReport()">🖨️ Print / PDF</button>
     </div>
@@ -121,6 +115,16 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
 
 <div id="loading">⏳ กำลังดึงข้อมูลจาก AVL Sheet…</div>
 <div id="app" style="display:none">
+
+<div class="filterbar" id="rangebar">
+  <span class="flabel">📅 เลือกช่วงวัน:</span>
+  <input type="date" id="dateFrom" title="วันเริ่มต้น">
+  <span class="dto">ถึง</span>
+  <input type="date" id="dateTo" title="วันสิ้นสุด">
+  <button id="applyRangeBtn" onclick="applyRange()">ดูช่วงวัน</button>
+  <button id="clearRangeBtn" onclick="clearRange()" style="display:none">✕ ล้างช่วง</button>
+  <span class="note" id="rangeHint" style="margin-left:auto">หรือเลือกเดือน/วันจากด้านบน</span>
+</div>
 
 <div class="filterbar" id="filterbar">
   <span class="flabel">🔎 กรอง Farm Code:</span>
@@ -310,6 +314,8 @@ function setRangeUI(){
   document.getElementById('selDay').disabled=on;
   document.getElementById('applyRangeBtn').classList.toggle('gold',!on);
   document.getElementById('clearRangeBtn').style.display=on?'':'none';
+  const hint=document.getElementById('rangeHint');
+  if(hint){hint.textContent=on?'📌 กำลังดูแบบช่วงวัน — กด ✕ ล้างช่วง เพื่อกลับไปดูรายวัน':'หรือเลือกเดือน/วันจากด้านบน';hint.style.color=on?'var(--gold)':'var(--muted)';}
 }
 function applyRange(){
   const f=document.getElementById('dateFrom').value,t=document.getElementById('dateTo').value;
