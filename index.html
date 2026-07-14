@@ -21,6 +21,13 @@ body{background:var(--bg);color:var(--txt);font-family:'Noto Sans Thai','Space G
 select,button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-family:'Noto Sans Thai';font-size:14px;cursor:pointer}
 select:hover,button:hover{border-color:var(--gold-dim)}
 button.gold{background:var(--gold);color:#1A1200;font-weight:600;border:none}
+input[type=date]{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:13px;cursor:pointer}
+input[type=date]:hover{border-color:var(--gold-dim)}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.75);cursor:pointer}
+select:disabled{opacity:.4;cursor:not-allowed}
+select:disabled:hover{border-color:var(--line)}
+.rangesep{color:var(--line);font-size:16px;margin:0 2px}
+.dto{color:var(--muted);font-size:12.5px}
 .stamp{color:var(--muted);font-size:11.5px;text-align:right}
 .sec{display:flex;align-items:center;gap:10px;margin:24px 0 12px;color:var(--gold);font-size:13.5px;font-weight:600;letter-spacing:.8px}
 .sec::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -99,6 +106,12 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
     <div class="ctrl">
       <select id="selMonth"></select>
       <select id="selDay"></select>
+      <span class="rangesep">|</span>
+      <input type="date" id="dateFrom" title="วันเริ่มต้น">
+      <span class="dto">ถึง</span>
+      <input type="date" id="dateTo" title="วันสิ้นสุด">
+      <button id="applyRangeBtn" onclick="applyRange()">📅 ดูช่วงวัน</button>
+      <button id="clearRangeBtn" onclick="clearRange()" style="display:none">✕ ล้างช่วง</button>
       <button class="gold" onclick="loadData()">⟳ Refresh</button>
       <button onclick="printReport()">🖨️ Print / PDF</button>
     </div>
@@ -128,13 +141,13 @@ footer .l b{color:var(--gold)} footer .r{text-align:right;color:var(--muted)} fo
     <svg id="trend" viewBox="0 0 640 250" width="100%"></svg>
   </div>
   <div class="panel">
-    <div style="font-size:13.5px;font-weight:600;margin-bottom:12px">สัดส่วนประเภทวัตถุดิบ (กก.) — วันที่เลือก</div>
+    <div style="font-size:13.5px;font-weight:600;margin-bottom:12px">สัดส่วนประเภทวัตถุดิบ (กก.) — <span class="focusLbl">วันที่เลือก</span></div>
     <svg id="grades" viewBox="0 0 320 250" width="100%"></svg>
     <div class="note" style="margin-top:6px">* ตกไซส์/ห้องเย็น/ABC = ประเภท batch วัตถุดิบ ไม่ใช่เกรดคุณภาพ</div>
   </div>
 </div>
 
-<div class="sec">📋 สรุปแยกแหล่ง — วันที่เลือก</div>
+<div class="sec">📋 สรุปแยกแหล่ง — <span class="focusLbl" style="color:var(--txt)">วันที่เลือก</span></div>
 <div class="panel" style="overflow-x:auto">
   <table id="tblSrc"></table>
 </div>
@@ -172,7 +185,12 @@ const CODE_META={
 };
 const THM=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 let DATA=[],MONTHS=[],curMonth=null,curDay=null,activeCodes=new Set();
+let rangeMode=false,rangeFrom=null,rangeTo=null; // rangeFrom/To = _key ints (yyyymmdd)
 const tip=document.getElementById('tip');
+// _key (yyyymmdd) helpers
+const keyToISO=k=>{const y=Math.floor(k/10000),m=Math.floor(k/100)%100,d=k%100;return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`};
+const isoToKey=s=>{const [y,m,d]=s.split('-').map(Number);return y*10000+m*100+d};
+const dayLabel=k=>{const d=k%100,m=Math.floor(k/100)%100;return d+' '+THM[m-1]};
 const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function showTip(e,h){tip.innerHTML=h;tip.style.opacity=1;tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-10)+'px'}
 function hideTip(){tip.style.opacity=0}
@@ -226,6 +244,14 @@ async function loadData(){
     const sm=document.getElementById('selMonth');
     sm.innerHTML=ms.map(m=>`<option value="${m}">${THM[m%100-1]} ${Math.floor(m/100)}</option>`).join('');
     curMonth=ms[0];sm.value=curMonth;
+    // date-range inputs: bound to data span, default to current month
+    const keys=DATA.map(r=>r._key);
+    const minK=Math.min(...keys),maxK=Math.max(...keys);
+    const df=document.getElementById('dateFrom'),dt=document.getElementById('dateTo');
+    df.min=dt.min=keyToISO(minK);df.max=dt.max=keyToISO(maxK);
+    const cmKeys=monthRows().map(r=>r._key);
+    df.value=keyToISO(Math.min(...cmKeys));dt.value=keyToISO(Math.max(...cmKeys));
+    rangeMode=false;setRangeUI();
     buildChips();
     buildDays();
     document.getElementById('stamp').textContent='อัปเดตล่าสุด: '+new Date().toLocaleString('th-TH')+' · '+fmt(DATA.length)+' รายการ';
@@ -237,11 +263,13 @@ async function loadData(){
   }
 }
 function monthRows(){return DATA.filter(r=>r._y*100+r._m===+curMonth)}
+// rows for the active period: date range when in range mode, else the selected month
+function periodRowsRaw(){return rangeMode?DATA.filter(r=>r._key>=rangeFrom&&r._key<=rangeTo):monthRows()}
 // apply active code filter (empty set = show all)
 function fc(rows){return activeCodes.size?rows.filter(r=>activeCodes.has(r._code)):rows}
 function buildChips(){
-  // codes available in current month (before filter), sorted by volume
-  const mr=monthRows();
+  // codes available in the active period (before filter), sorted by volume
+  const mr=periodRowsRaw();
   const vol={};mr.forEach(r=>{vol[r._code]=(vol[r._code]||0)+r._kg});
   const codes=Object.keys(vol).sort((a,b)=>vol[b]-vol[a]);
   // drop any active codes not present this month
@@ -256,11 +284,13 @@ function buildChips(){
   box.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{
     const c=el.dataset.c;
     if(activeCodes.has(c))activeCodes.delete(c);else activeCodes.add(c);
-    buildChips();buildDays();
+    buildChips();refresh();
   }));
   document.getElementById('freset').style.display=activeCodes.size?'':'none';
 }
-function resetCodes(){activeCodes.clear();buildChips();buildDays();}
+// re-render downstream after a filter change (day selector only matters outside range mode)
+function refresh(){if(rangeMode)render();else buildDays();}
+function resetCodes(){activeCodes.clear();buildChips();refresh();}
 function buildDays(){
   const days=[...new Set(fc(monthRows()).map(r=>r._d))].sort((a,b)=>b-a);
   const sd=document.getElementById('selDay');
@@ -273,30 +303,70 @@ function buildDays(){
 document.getElementById('selMonth').addEventListener('change',e=>{curMonth=+e.target.value;buildChips();buildDays()});
 document.getElementById('selDay').addEventListener('change',e=>{curDay=+e.target.value;render()});
 
+// ===== Date-range filter =====
+function setRangeUI(){
+  const on=rangeMode;
+  document.getElementById('selMonth').disabled=on;
+  document.getElementById('selDay').disabled=on;
+  document.getElementById('applyRangeBtn').classList.toggle('gold',!on);
+  document.getElementById('clearRangeBtn').style.display=on?'':'none';
+}
+function applyRange(){
+  const f=document.getElementById('dateFrom').value,t=document.getElementById('dateTo').value;
+  if(!f||!t){alert('กรุณาเลือกวันเริ่มต้นและวันสิ้นสุด');return}
+  let fk=isoToKey(f),tk=isoToKey(t);
+  if(fk>tk)[fk,tk]=[tk,fk];
+  if(!DATA.some(r=>r._key>=fk&&r._key<=tk)){alert('ไม่มีข้อมูลในช่วงวันที่เลือก');return}
+  rangeFrom=fk;rangeTo=tk;rangeMode=true;
+  setRangeUI();buildChips();render();
+}
+function clearRange(){
+  rangeMode=false;rangeFrom=rangeTo=null;
+  setRangeUI();buildChips();buildDays();
+}
+
 function agg(rows){
   const kg=rows.reduce((s,r)=>s+r._kg,0),val=rows.reduce((s,r)=>s+r._val,0);
   return{kg,val,price:kg?val/kg:0};
 }
 function render(){
-  const mr=fc(monthRows());
-  const dayRows=mr.filter(r=>r._d===+curDay);
-  const days=[...new Set(mr.map(r=>r._d))].sort((a,b)=>a-b);
-  const daily=days.map(d=>({d,...agg(mr.filter(r=>r._d===d))}));
+  const mr=fc(periodRowsRaw());
+  // focus = the KPI/sources/supplier/grade scope: whole range in range mode, else the selected day
+  const dayRows=rangeMode?mr:mr.filter(r=>r._d===+curDay);
+  const days=[...new Set(mr.map(r=>r._key))].sort((a,b)=>a-b);
+  const daily=days.map(k=>({k,d:k%100,m:Math.floor(k/100)%100,...agg(mr.filter(r=>r._key===k))}));
+  const multiMonth=new Set(daily.map(x=>x.m)).size>1;
+  const selKey=rangeMode?null:(+curMonth*100+ +curDay);
   const t=agg(dayRows);
-  const prev=daily.filter(x=>x.d<+curDay).pop();
-  const mn=THM[curMonth%100-1]+' '+Math.floor(curMonth/100);
   const flt=activeCodes.size?' · กรอง: '+[...activeCodes].join(', '):'';
-  document.getElementById('kpiDate').textContent=`วันที่ ${curDay} ${mn}${flt}`;
+  document.querySelectorAll('.focusLbl').forEach(el=>el.textContent=rangeMode?'ช่วงที่เลือก':'วันที่เลือก');
+  if(rangeMode){
+    document.getElementById('kpiDate').textContent=`ช่วง ${dayLabel(rangeFrom)} – ${dayLabel(rangeTo)}${flt}`;
+  }else{
+    const mn=THM[curMonth%100-1]+' '+Math.floor(curMonth/100);
+    document.getElementById('kpiDate').textContent=`วันที่ ${curDay} ${mn}${flt}`;
+  }
 
-  // KPI
-  const diff=prev?t.price-prev.price:null;
+  // KPI — comparison card adapts to mode
+  let diff,cmpLabel,cmpUnit;
+  if(rangeMode){
+    const first=daily[0],last=daily[daily.length-1];
+    diff=daily.length>1?last.price-first.price:null;
+    cmpLabel='เทรนด์ในช่วง'+(daily.length?' ('+daily.length+' วัน)':'');
+    cmpUnit=diff==null?'ข้อมูลวันเดียว':'฿/กก. · '+fmt(first.price,2)+' → '+fmt(last.price,2);
+  }else{
+    const prev=daily.filter(x=>x.d<+curDay).pop();
+    diff=prev?t.price-prev.price:null;
+    cmpLabel='เทียบวันก่อนหน้า'+(prev?' ('+prev.d+' '+THM[curMonth%100-1]+')':'');
+    cmpUnit=prev?'฿/กก. · '+fmt(prev.price,2)+' → '+fmt(t.price,2):'ไม่มีข้อมูลวันก่อน';
+  }
   document.getElementById('kpis').innerHTML=`
    <div class="kpi"><div class="lb">น้ำหนักรวม</div><div class="v">${fmt(t.kg,1)}</div><div class="u">กิโลกรัม · ${dayRows.length} รายการ</div></div>
    <div class="kpi"><div class="lb">มูลค่ารับซื้อรวม</div><div class="v">${fmt(t.val)}</div><div class="u">บาท (AVL)</div></div>
    <div class="kpi"><div class="lb">ราคาเฉลี่ย blended</div><div class="v">${fmt(t.price,2)}</div><div class="u">บาท/กก.</div></div>
-   <div class="kpi ${diff==null?'':(diff<0?'neg':'pos')}"><div class="lb">เทียบวันก่อนหน้า${prev?' ('+prev.d+' '+THM[curMonth%100-1]+')':''}</div>
+   <div class="kpi ${diff==null?'':(diff<0?'neg':'pos')}"><div class="lb">${cmpLabel}</div>
      <div class="v">${diff==null?'—':(diff>0?'+':'−')+fmt(Math.abs(diff),2)}</div>
-     <div class="u">${prev?'฿/กก. · '+fmt(prev.price,2)+' → '+fmt(t.price,2):'ไม่มีข้อมูลวันก่อน'}</div></div>`;
+     <div class="u">${cmpUnit}</div></div>`;
 
   // Sources
   const byCode={};
@@ -312,7 +382,7 @@ function render(){
   }).join('');
 
   // Trend chart
-  drawTrend(daily);
+  drawTrend(daily,selKey,multiMonth);
   // Grade mix
   drawGrades(dayRows);
 
@@ -335,14 +405,14 @@ function render(){
   // Daily table
   document.getElementById('tblDaily').innerHTML=`
    <thead><tr><th>วันที่</th><th class="num">น้ำหนัก (กก.)</th><th class="num">มูลค่า (฿)</th><th class="num">ราคาเฉลี่ย (฿/กก.)</th><th class="num">Δ ราคา</th></tr></thead><tbody>`+
-   daily.map((x,i)=>{const d0=i?x.price-daily[i-1].price:null;
-    return`<tr style="${x.d===+curDay?'background:#141C36':''}"><td class="mono">${x.d} ${THM[curMonth%100-1]}${x.d===+curDay?' ★':''}</td>
+   daily.map((x,i)=>{const d0=i?x.price-daily[i-1].price:null;const sel=x.k===selKey;
+    return`<tr style="${sel?'background:#141C36':''}"><td class="mono">${dayLabel(x.k)}${sel?' ★':''}</td>
     <td class="num">${fmt(x.kg,1)}</td><td class="num">${fmt(x.val)}</td><td class="num">${fmt(x.price,2)}</td>
     <td class="num" style="color:${d0==null?'var(--muted)':(d0<0?'var(--red)':'var(--green)')}">${d0==null?'—':(d0>0?'+':'−')+fmt(Math.abs(d0),2)}</td></tr>`}).join('')+
-   `<tr class="total"><td>รวม/เฉลี่ยเดือน</td><td class="num">${fmt(daily.reduce((s,x)=>s+x.kg,0),1)}</td><td class="num">${fmt(daily.reduce((s,x)=>s+x.val,0))}</td><td class="num">${fmt(daily.reduce((s,x)=>s+x.val,0)/Math.max(1,daily.reduce((s,x)=>s+x.kg,0)),2)}</td><td></td></tr></tbody>`;
+   `<tr class="total"><td>${rangeMode?'รวม/เฉลี่ยช่วง':'รวม/เฉลี่ยเดือน'}</td><td class="num">${fmt(daily.reduce((s,x)=>s+x.kg,0),1)}</td><td class="num">${fmt(daily.reduce((s,x)=>s+x.val,0))}</td><td class="num">${fmt(daily.reduce((s,x)=>s+x.val,0)/Math.max(1,daily.reduce((s,x)=>s+x.kg,0)),2)}</td><td></td></tr></tbody>`;
 }
 
-function drawTrend(daily){
+function drawTrend(daily,selKey,multi){
   const svg=document.getElementById('trend'),W=640,H=250,pad={l:42,r:14,t:22,b:32};
   if(!daily.length){svg.innerHTML='';return}
   const avg=daily.reduce((s,x)=>s+x.val,0)/daily.reduce((s,x)=>s+x.kg,0);
@@ -356,17 +426,19 @@ function drawTrend(daily){
   s+=`<line x1="${pad.l}" y1="${y(avg)}" x2="${W-pad.r}" y2="${y(avg)}" stroke="#C8982A" stroke-dasharray="5 4"/><text x="${W-pad.r}" y="${y(avg)-5}" fill="#C8982A" font-size="10.5" text-anchor="end" font-family="DM Mono">avg ${avg.toFixed(2)}</text>`;
   daily.forEach((p,i)=>{
     const col=p.price>avg+0.6?'#2DD4A7':(p.price<avg-2.5?'#F87171':'#F0B429');
-    const sel=p.d===+curDay;
-    s+=`<g class="bg" data-d="${p.d}" data-v="${p.price.toFixed(2)}" data-kg="${p.kg}" style="cursor:pointer">
+    const sel=p.k===selKey;
+    const lb=multi?p.d+'/'+p.m:p.d;
+    s+=`<g class="bg" data-k="${p.k}" data-lb="${dayLabel(p.k)}" data-v="${p.price.toFixed(2)}" data-kg="${p.kg}" style="cursor:pointer">
       <rect x="${x(i)}" y="${y(p.price)}" width="${bw}" height="${H-pad.b-y(p.price)}" rx="5" fill="${col}" opacity="${sel?1:.82}" ${sel?'stroke="#fff" stroke-width="1.2"':''}></rect>
       ${daily.length<=16?`<text x="${x(i)+bw/2}" y="${y(p.price)-6}" fill="${col}" font-size="10.5" text-anchor="middle" font-family="DM Mono">${p.price.toFixed(2)}</text>`:''}
-      <text x="${x(i)+bw/2}" y="${H-12}" fill="${sel?'#F0B429':'#8B94B0'}" font-size="11" text-anchor="middle" font-family="DM Mono">${p.d}${sel?'★':''}</text></g>`;
+      <text x="${x(i)+bw/2}" y="${H-12}" fill="${sel?'#F0B429':'#8B94B0'}" font-size="${multi&&daily.length>12?9.5:11}" text-anchor="middle" font-family="DM Mono">${lb}${sel?'★':''}</text></g>`;
   });
   svg.innerHTML=s;
   svg.querySelectorAll('.bg').forEach(g=>{
-    g.addEventListener('mousemove',e=>showTip(e,`วันที่ ${g.dataset.d}<br><b style="color:#F0B429">${g.dataset.v} ฿/กก.</b><br>${fmt(+g.dataset.kg)} กก.`));
+    g.addEventListener('mousemove',e=>showTip(e,`${g.dataset.lb}<br><b style="color:#F0B429">${g.dataset.v} ฿/กก.</b><br>${fmt(+g.dataset.kg)} กก.`));
     g.addEventListener('mouseleave',hideTip);
-    g.addEventListener('click',()=>{document.getElementById('selDay').value=g.dataset.d;curDay=+g.dataset.d;render()});
+    // clicking a bar jumps to that day — only meaningful outside range mode
+    g.addEventListener('click',()=>{if(rangeMode)return;const k=+g.dataset.k,d=k%100;document.getElementById('selDay').value=d;curDay=d;render()});
   });
 }
 
